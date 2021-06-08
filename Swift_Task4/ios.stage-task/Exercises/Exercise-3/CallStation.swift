@@ -25,40 +25,12 @@ extension CallStation: Station {
     func execute(action: CallAction) -> CallID? {
         switch action {
         case .start(from: let from, to: let to):
-            if users().contains(from) || users().contains(to) {
-                var call = Call(id: UUID(), incomingUser: to, outgoingUser: from, status: .calling)
-                if let _ = callsDB.first(where: { ($0.incomingUser == to || $0.outgoingUser == to) && $0.status == .talk }) {
-                    call.status = .ended(reason: .userBusy)
-                }
-                if !(users().contains(from) && users().contains(to)) {
-                    call.status = .ended(reason: .error)
-                }
-                callsDB.append(call)
-                return call.id
-            }
+            return executeStart(from: from, to: to)
         case .answer(from: let from):
-            if var answeredCall = callsDB.first(where: { $0.incomingUser == from || $0.outgoingUser == from }) {
-                if usersDB.contains(from) {
-                    answeredCall.status = .talk
-                    updateCall(answeredCall)
-                    return answeredCall.id
-                }
-            }
+            return executeAnswer(from: from)
         case .end(from: let from):
-            if var endedCall = callsDB.first(where: { $0.incomingUser == from || $0.outgoingUser == from }) {
-                switch endedCall.status {
-                case .calling:
-                    endedCall.status = .ended(reason: .cancel)
-                case .talk:
-                    endedCall.status = .ended(reason: .end)
-                case .ended(reason: let reason):
-                    print(reason)
-                }
-                updateCall(endedCall)
-                return endedCall.id
-            }
+            return executeEnd(from: from)
         }
-        return nil
     }
     
     func calls() -> [Call] {
@@ -78,6 +50,50 @@ extension CallStation: Station {
             ($0.status == .calling || $0.status == .talk) &&
                 ($0.incomingUser == user || $0.outgoingUser == user)
         })
+    }
+    
+    private func executeStart(from: User, to: User) -> CallID? {
+        if users().contains(from) || users().contains(to) {
+            var call = Call(id: UUID(), incomingUser: to, outgoingUser: from, status: .calling)
+            if let _ = callsDB.first(where: { ($0.incomingUser == to || $0.outgoingUser == to) && $0.status == .talk }) {
+                call.status = .ended(reason: .userBusy)
+            }
+            if !(users().contains(from) && users().contains(to)) {
+                call.status = .ended(reason: .error)
+            }
+            callsDB.append(call)
+            return call.id
+        } else {
+            return nil
+        }
+    }
+    
+    private func executeAnswer(from: User) -> CallID? {
+        if var answeredCall = callsDB.first(where: { $0.incomingUser == from || $0.outgoingUser == from }) {
+            if usersDB.contains(from) {
+                answeredCall.status = .talk
+                updateCall(answeredCall)
+                return answeredCall.id
+            }
+        }
+        return nil
+    }
+    
+    private func executeEnd(from: User) -> CallID? {
+        if var endedCall = callsDB.first(where: { $0.incomingUser == from || $0.outgoingUser == from }) {
+            switch endedCall.status {
+            case .calling:
+                endedCall.status = .ended(reason: .cancel)
+            case .talk:
+                endedCall.status = .ended(reason: .end)
+            case .ended(reason: let reason):
+                print(reason)
+            }
+            updateCall(endedCall)
+            return endedCall.id
+        } else {
+            return nil
+        }
     }
     
     private func updateCall(_ call: Call) {
